@@ -2,6 +2,12 @@
 
 Projeto desenvolvido para a disciplina de **Physical Computing / IoT** (Turma 3ESPZ - FIAP).
 
+## Integrantes - Ford FideliCar
+- Albert Katri - RM556544
+- Bruno Biletsky - RM554739
+- Paulo Akira - RM556840
+- Guilherme Gomes - RM554606
+
 ---
 
 ## Estrutura do Projeto
