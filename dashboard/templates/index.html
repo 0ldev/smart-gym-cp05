@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Gym - Telemetria & Monitoramento IoT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.85; transform: scale(1.05); }
+        }
+        .badge-pulse {
+            animation: pulse-slow 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 sticky top-0 z-50 px-6 py-4 flex items-center justify-between shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-cyan-500/20 shadow-md">
+                <i class="fa-solid fa-dumbbell text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    SMART GYM <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">CP05 IoT</span>
+                </h1>
+                <p class="text-xs text-slate-400">FIAP 3ESPZ - Physical Computing (IoT & IoB)</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4 text-xs font-medium">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>MQTT: <b class="text-cyan-400">broker.hivemq.com</b></span>
+            </div>
+            <div class="text-slate-400 text-right hidden sm:block">
+                <div>Estação: <span class="text-white font-mono">smart_station_01</span></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+
+        <!-- Grid de Cartões de Status -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Card 1: Status da Máquina -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Status da Máquina</span>
+                        <i class="fa-solid fa-satellite-dish text-slate-500"></i>
+                    </div>
+                    
+                    <div class="flex items-center gap-4 my-2">
+                        <div id="status-indicator-dot" class="w-5 h-5 rounded-full bg-emerald-500 badge-pulse shadow-lg shadow-emerald-500/50"></div>
+                        <div>
+                            <h2 id="station-status-text" class="text-3xl font-extrabold text-emerald-400 uppercase">
+                                {{ state.status }}
+                            </h2>
+                            <p id="station-status-sub" class="text-xs text-slate-400">
+                                {% if state.status == 'Ocupada' %}Estação em uso por aluno{% else %}Disponível para treino{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-400">
+                    <span>Último evento RFID:</span>
+                    <span id="last-update-time" class="font-mono text-slate-200">{{ state.last_update }}</span>
+                </div>
+            </div>
+
+            <!-- Card 2: Aluno Atual Autenticado (RFID) -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Aluno Conectado (RFID)</span>
+                        <i class="fa-solid fa-id-card text-blue-400"></i>
+                    </div>
+                    
+                    <div class="flex items-center gap-3 my-2">
+                        <div class="w-12 h-12 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xl border border-blue-500/30">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <div id="student-name" class="text-xl font-bold text-white">{{ state.student }}</div>
+                            <div class="text-xs font-mono text-slate-400">UID: <span id="student-uid">{{ state.rfid_uid or '---' }}</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs">
+                    <span class="text-slate-400">Autenticação:</span>
+                    <span id="auth-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold {% if state.status == 'Ocupada' %}bg-blue-500/20 text-blue-300 border border-blue-500/30{% else %}bg-slate-800 text-slate-400{% endif %}">
+                        {% if state.status == 'Ocupada' %}Sessão Ativa{% else %}Aguardando Cartão{% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Card 3: Telemetria em Tempo Real (YOLO) -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Série Atual (Visão YOLO)</span>
+                        <i class="fa-solid fa-camera text-cyan-400"></i>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 my-2 text-center">
+                        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                            <div class="text-xs text-slate-400 mb-1">Repetições</div>
+                            <div id="telemetry-reps" class="text-3xl font-extrabold text-cyan-400 font-mono">{{ state.reps }}</div>
+                        </div>
+                        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+                            <div class="text-xs text-slate-400 mb-1">Ângulo Cotovelo</div>
+                            <div id="telemetry-angle" class="text-3xl font-extrabold text-amber-400 font-mono">{{ state.angle }}º</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs">
+                    <span class="text-slate-400">Indicador de Fadiga:</span>
+                    <span id="fatigue-indicator" class="px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-400">
+                        Normal
+                    </span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tabela de Histórico Recente -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-md overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i>
+                    <h3 class="font-bold text-white text-base">Histórico de Séries Concluídas (MQTT Telemetria)</h3>
+                </div>
+                <span class="text-xs text-slate-400 font-mono">Atualização Automática (EventStream)</span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <tr>
+                            <th class="px-6 py-3">Hora</th>
+                            <th class="px-6 py-3">Aluno</th>
+                            <th class="px-6 py-3 text-center">Volume (Reps)</th>
+                            <th class="px-6 py-3 text-center">Duração</th>
+                            <th class="px-6 py-3 text-center">Cadência</th>
+                            <th class="px-6 py-3 text-center">Fadiga</th>
+                            <th class="px-6 py-3 text-center">Descanso Sugerido</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-slate-800/60">
+                        {% for row in history %}
+                        <tr class="hover:bg-slate-800/40 transition-colors">
+                            <td class="px-6 py-4 font-mono text-xs text-slate-400">{{ row.timestamp }}</td>
+                            <td class="px-6 py-4 font-semibold text-white">{{ row.student }}</td>
+                            <td class="px-6 py-4 text-center font-bold text-cyan-400 text-base font-mono">{{ row.reps }}</td>
+                            <td class="px-6 py-4 text-center font-mono">{{ row.duration }}</td>
+                            <td class="px-6 py-4 text-center font-mono text-slate-400">{{ row.cadence }}</td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold {% if 'SIM' in row.fatigue %}bg-rose-500/20 text-rose-300 border border-rose-500/30{% else %}bg-slate-800 text-slate-400{% endif %}">
+                                    {{ row.fatigue }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    {{ row.rest }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Rodapé -->
+    <footer class="border-t border-slate-800/80 px-6 py-4 text-center text-xs text-slate-500">
+        FIAP - Engenharia de Software | Checkpoint 05 - Prof. Lucas D. Augusto
+    </footer>
+
+    <!-- Conexão Server-Sent Events em tempo real -->
+    <script>
+        const evtSource = new EventSource('/events');
+
+        const statusText = document.getElementById('station-status-text');
+        const statusSub = document.getElementById('station-status-sub');
+        const statusDot = document.getElementById('status-indicator-dot');
+        const studentName = document.getElementById('student-name');
+        const studentUid = document.getElementById('student-uid');
+        const authBadge = document.getElementById('auth-badge');
+        const lastUpdateTime = document.getElementById('last-update-time');
+        const telemetryReps = document.getElementById('telemetry-reps');
+        const telemetryAngle = document.getElementById('telemetry-angle');
+        const fatigueIndicator = document.getElementById('fatigue-indicator');
+        const tableBody = document.getElementById('history-table-body');
+
+        function updateStationUI(data) {
+            const isOcupada = data.status === 'Ocupada';
+            statusText.textContent = data.status.toUpperCase();
+            
+            if (isOcupada) {
+                statusText.className = 'text-3xl font-extrabold text-rose-500 uppercase';
+                statusDot.className = 'w-5 h-5 rounded-full bg-rose-500 badge-pulse shadow-lg shadow-rose-500/50';
+                statusSub.textContent = 'Estação em uso por aluno';
+                authBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+                authBadge.textContent = 'Sessão Ativa';
+            } else {
+                statusText.className = 'text-3xl font-extrabold text-emerald-400 uppercase';
+                statusDot.className = 'w-5 h-5 rounded-full bg-emerald-500 badge-pulse shadow-lg shadow-emerald-500/50';
+                statusSub.textContent = 'Disponível para treino';
+                authBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400';
+                authBadge.textContent = 'Aguardando Cartão';
+            }
+
+            studentName.textContent = data.student || 'Nenhum';
+            studentUid.textContent = data.rfid_uid || '---';
+            if (data.last_update) lastUpdateTime.textContent = data.last_update;
+        }
+
+        evtSource.addEventListener('status_update', (e) => {
+            const data = JSON.parse(e.data);
+            updateStationUI(data);
+        });
+
+        evtSource.addEventListener('telemetry_update', (e) => {
+            const data = JSON.parse(e.data);
+            telemetryReps.textContent = data.reps;
+            telemetryAngle.textContent = data.angle + 'º';
+            if (data.fatigue) {
+                fatigueIndicator.className = 'px-2 py-0.5 rounded text-xs font-bold bg-rose-500 text-white animate-pulse';
+                fatigueIndicator.textContent = 'FADIGA DETECTADA';
+            } else {
+                fatigueIndicator.className = 'px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-400';
+                fatigueIndicator.textContent = 'Normal';
+            }
+        });
+
+        evtSource.addEventListener('history_update', (e) => {
+            const row = JSON.parse(e.data);
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-800/40 transition-colors bg-cyan-950/20';
+            const isFatigue = row.fatigue.includes('SIM');
+            
+            tr.innerHTML = `
+                <td class="px-6 py-4 font-mono text-xs text-slate-400">${row.timestamp}</td>
+                <td class="px-6 py-4 font-semibold text-white">${row.student}</td>
+                <td class="px-6 py-4 text-center font-bold text-cyan-400 text-base font-mono">${row.reps}</td>
+                <td class="px-6 py-4 text-center font-mono">${row.duration}</td>
+                <td class="px-6 py-4 text-center font-mono text-slate-400">${row.cadence}</td>
+                <td class="px-6 py-4 text-center">
+                    <span class="px-2 py-1 rounded-full text-xs font-semibold ${isFatigue ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-slate-400'}">
+                        ${row.fatigue}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        ${row.rest}
+                    </span>
+                </td>
+            `;
+            tableBody.insertBefore(tr, tableBody.firstChild);
+        });
+    </script>
+</body>
+</html>
