@@ -37,11 +37,6 @@ const char* TOPIC_PERFORMANCE = "smartgym/station/performance";
 // MOSI -> GPIO 23
 // MISO -> GPIO 19
 
-// Atuadores / Sinalizadores
-#define LED_LIVRE    2   // LED Verde (Estação Livre)
-#define LED_OCUPADA  4   // LED Vermelho (Estação Ocupada)
-#define BUZZER_PIN   15  // Feedback sonoro de bipe
-
 // Instâncias dos periféricos
 MFRC522 rfid(SS_PIN, RST_PIN);
 WiFiClient espClient;
@@ -55,6 +50,7 @@ struct Student {
 
 // Cadastre as tags dos participantes aqui
 Student registeredStudents[] = {
+  {"F9395373", "Bruno Biletsky"},
   {"A1B2C3D4", "Carlos Silva"},
   {"E5F6G7H8", "Mariana Costa"},
   {"12345678", "Lucas Augusto"}
@@ -75,7 +71,7 @@ unsigned long sessionStartTime = 0;
 // ================= PROTÓTIPOS =================
 void setupWiFi();
 void reconnectMQTT();
-void beep(int frequency, int durationMs);
+void onMqttMessage(char* topic, byte* payload, unsigned int length);
 void publishStatus(const char* status, const String& student, const String& uid);
 String getUIDString(MFRC522::Uid *uid);
 String findStudentName(const String& uidStr);
@@ -84,14 +80,6 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== INICIANDO SMART GYM STATION (ESP32 + RFID) ===");
-
-  pinMode(LED_LIVRE, OUTPUT);
-  pinMode(LED_OCUPADA, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-
-  // Estado inicial:
-  digitalWrite(LED_LIVRE, HIGH);
-  digitalWrite(LED_OCUPADA, LOW);
 
   // Inicializa SPI e RC522
   SPI.begin();
@@ -102,8 +90,8 @@ void setup() {
   // Conexões de Rede
   setupWiFi();
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  mqttClient.setCallback(onMqttMessage);
 
-  beep(1000, 150);
   Serial.println("Estação pronta. Aproxime a tag RFID.");
 }
 
@@ -135,28 +123,12 @@ void loop() {
     currentStudentUID = scannedUID;
     sessionStartTime = millis();
 
-    digitalWrite(LED_LIVRE, LOW);
-    digitalWrite(LED_OCUPADA, HIGH);
-
-    // Bipe duplo de confirmação
-    beep(1800, 100);
-    delay(50);
-    beep(2400, 150);
-
     Serial.println("[ESTADO] Estação OCUPADA por: " + currentStudentName);
     publishStatus("Ocupada", currentStudentName, currentStudentUID);
   } else {
     // LOGOUT (apenas o mesmo usuário ou tag mestre pode deslogar)
     currentState = STATE_LIVRE;
     Serial.println("[ESTADO] Treino finalizado por: " + currentStudentName);
-
-    digitalWrite(LED_LIVRE, HIGH);
-    digitalWrite(LED_OCUPADA, LOW);
-
-    // Bipe descendente de logout
-    beep(2000, 120);
-    delay(50);
-    beep(1000, 200);
 
     publishStatus("Livre", "", "");
     currentStudentName = "";
@@ -194,6 +166,7 @@ void reconnectMQTT() {
     Serial.print("[MQTT] Conectando ao Broker... ");
     if (mqttClient.connect(MQTT_CLIENT_ID)) {
       Serial.println("Conectado com sucesso!");
+      mqttClient.subscribe(TOPIC_STATUS);
       // Publica status inicial
       publishStatus(currentState == STATE_LIVRE ? "Livre" : "Ocupada", currentStudentName, currentStudentUID);
     } else {
@@ -241,6 +214,17 @@ String findStudentName(const String& uidStr) {
   return "";
 }
 
-void beep(int frequency, int durationMs) {
-  tone(BUZZER_PIN, frequency, durationMs);
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+  String msg = "";
+  for (unsigned int i = 0; i < length; i++) {
+    msg += (char)payload[i];
+  }
+  if (msg.indexOf("\"status\":\"Livre\"") >= 0) {
+    if (currentState == STATE_OCUPADA) {
+      currentState = STATE_LIVRE;
+      currentStudentName = "";
+      currentStudentUID = "";
+      Serial.println("[MQTT EVT] Estação liberada por conclusão de série. Pronta para novo toque RFID.");
+    }
+  }
 }

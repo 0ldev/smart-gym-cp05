@@ -3,24 +3,11 @@
   "author": "Smart Gym Team",
   "editor": "wokwi",
   "parts": [
-    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
-    { "type": "wokwi-led", "id": "led_green", "top": -60, "left": -80, "attrs": { "color": "green" } },
-    { "type": "wokwi-led", "id": "led_red", "top": -60, "left": -40, "attrs": { "color": "red" } },
-    { "type": "wokwi-buzzer", "id": "buzzer", "top": -60, "left": 40, "attrs": {} },
-    { "type": "wokwi-resistor", "id": "r1", "top": -20, "left": -80, "attrs": { "value": "220" } },
-    { "type": "wokwi-resistor", "id": "r2", "top": -20, "left": -40, "attrs": { "value": "220" } }
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} }
   ],
   "connections": [
     [ "esp:TX0", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
-    [ "esp:D2", "r1:2", "green", [ "v0" ] ],
-    [ "r1:1", "led_green:A", "green", [ "v0" ] ],
-    [ "esp:GND.1", "led_green:C", "black", [ "v0" ] ],
-    [ "esp:D4", "r2:2", "red", [ "v0" ] ],
-    [ "r2:1", "led_red:A", "red", [ "v0" ] ],
-    [ "esp:GND.1", "led_red:C", "black", [ "v0" ] ],
-    [ "esp:D15", "buzzer:2", "purple", [ "v0" ] ],
-    [ "esp:GND.2", "buzzer:1", "black", [ "v0" ] ]
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ]
   ],
   "dependencies": {
     "PubSubClient": "2.8",

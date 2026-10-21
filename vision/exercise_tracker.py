@@ -64,7 +64,7 @@ def calculate_angle(a, b, c):
     angle = np.abs(radians * 180.0 / np.pi)
     if angle > 180.0:
         angle = 360.0 - angle
-    return angle
+    return float(angle)
 
 def detect_black_mass_in_hand(frame, wrist_pt, roi_radius=45):
     """
@@ -156,20 +156,17 @@ def on_message(client, userdata, msg):
 def finish_session(mqtt_client):
     """Publica performance do treino no tópico MQTT"""
     duration = round(time.time() - (session.session_start_time or time.time()), 1)
-    avg_cadence = round(np.mean(session.rep_durations), 2) if session.rep_durations else 0.0
-    
-    # Sugestão de descanso baseada em fadiga
-    rest_time = 90 if session.fatigue_detected or session.reps >= 12 else 60
+    avg_cadence = round(float(np.mean(session.rep_durations)), 2) if session.rep_durations else 0.0
 
     perf_data = {
         "station_id": "smart_station_01",
-        "student": session.student_name,
-        "rfid_uid": session.rfid_uid,
-        "reps": session.reps,
-        "duration_seconds": duration,
-        "avg_cadence_seconds": avg_cadence,
-        "fatigue_detected": session.fatigue_detected,
-        "recommended_rest_seconds": rest_time,
+        "student": str(session.student_name),
+        "rfid_uid": str(session.rfid_uid),
+        "reps": int(session.reps),
+        "duration_seconds": float(duration),
+        "avg_cadence_seconds": float(avg_cadence),
+        "fatigue_detected": False,
+        "recommended_rest_seconds": 60,
         "timestamp": int(time.time())
     }
 
@@ -272,36 +269,47 @@ def run_tracker():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
                     # ================= LÓGICA DE CONTAGEM E ÂNGULO =================
-                    # O exercício só computa se o usuário estiver autenticado (ou em modo simulação)
-                    # Ângulo de abertura (extensão): > 145 graus
-                    # Ângulo de fechamento (flexão/pico da contração): < 50 graus
+                    # Modo permissivo para apresentação:
+                    # - Ângulo de abertura/relaxamento: > 105 graus (arma para a próxima repetição)
+                    # - Ângulo de contração: <= 60 graus (computa repetição)
                     if session.session_active or session.station_status == "Ocupada":
-                        if tracked_angle > 145:
+                        if tracked_angle > 105:
                             session.stage = "DOWN"
 
-                        if tracked_angle < 50 and session.stage == "DOWN":
-                            if weight_detected: # Valida que está com o peso na mão
-                                session.stage = "UP"
-                                session.reps += 1
-                                now = time.time()
-                                if session.last_rep_time:
-                                    rep_duration = now - session.last_rep_time
-                                    session.rep_durations.append(rep_duration)
-                                    
-                                    # Análise de fadiga (perda acentuada de ritmo ou excesso de lentidão)
-                                    avg_time = np.mean(session.rep_durations[:-1]) if len(session.rep_durations) > 1 else rep_duration
-                                    if rep_duration > avg_time * 1.75 and rep_duration > 3.5:
-                                        session.fatigue_detected = True
-                                session.last_rep_time = now
+                        if tracked_angle <= 60 and session.stage == "DOWN":
+                            session.stage = "UP"
+                            session.reps += 1
+                            now = time.time()
+                            if session.last_rep_time:
+                                rep_duration = now - session.last_rep_time
+                                session.rep_durations.append(rep_duration)
+                            session.last_rep_time = now
 
-                                # Publica telemetria em tempo real a cada repetição
-                                telem = {
-                                    "reps": session.reps,
-                                    "angle": round(tracked_angle, 1),
-                                    "student": session.student_name,
-                                    "fatigue": session.fatigue_detected
+                            # Publica telemetria em tempo real a cada repetição
+                            telem = {
+                                "reps": int(session.reps),
+                                "angle": float(round(tracked_angle, 1)),
+                                "student": str(session.student_name),
+                                "fatigue": False
+                            }
+                            mqtt_client.publish(TOPIC_TELEMETRY, json.dumps(telem))
+                            print(f"[REPETIÇÃO {session.reps}/5 COMPUTADA] Ângulo: {round(tracked_angle, 1)}°")
+
+                            # Encerra automaticamente após 5 repetições
+                            if session.reps >= 5:
+                                print(f"\n[META DE 5 REPETIÇÕES ATINGIDA] Finalizando treino de {session.student_name}...")
+                                finish_session(mqtt_client)
+                                session.session_active = False
+                                session.station_status = "Livre"
+                                status_free = {
+                                    "station_id": "smart_station_01",
+                                    "status": "Livre",
+                                    "student": "",
+                                    "rfid_uid": "",
+                                    "timestamp": int(time.time() * 1000)
                                 }
-                                mqtt_client.publish(TOPIC_TELEMETRY, json.dumps(telem))
+                                mqtt_client.publish(TOPIC_STATUS, json.dumps(status_free), retain=True)
+                                print("[SESSÃO ENCERRADA] Estação Livre.\n")
 
         # ================= INTERFACE VISUAL (OVERLAY HEADS-UP) =================
         # Barra superior com status da estação
@@ -318,12 +326,6 @@ def run_tracker():
         cv2.rectangle(frame, (w - 180, 10), (w - 20, 70), (45, 45, 45), -1)
         cv2.putText(frame, f"REPS: {session.reps}", (w - 165, 52),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 3)
-
-        # Indicador de fadiga
-        if session.fatigue_detected:
-            cv2.rectangle(frame, (20, h - 70), (400, h - 20), (0, 0, 180), -1)
-            cv2.putText(frame, "FADIGA DETECTADA! DESCANSO: 90s", (30, h - 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
 
         # Exibe taxa de quadros (FPS)
         curr_time = time.time()
